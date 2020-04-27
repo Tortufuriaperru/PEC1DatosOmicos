@@ -81,7 +81,7 @@ knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen1.png")
 
 En este caso se siguen los siguientes pasos:
 
-####a) Identificación de grupos y quien pertenece a cada muestra.
+#### a) Identificación de grupos y quien pertenece a cada muestra.
 
 En este estudio se dispone de 10 muestras, 5 de ellas de pacientes con alopecia areata y otras cinco de pacientes sanos, identificadas como sigue:
 
@@ -98,7 +98,7 @@ En este estudio se dispone de 10 muestras, 5 de ellas de pacientes con alopecia 
 | GSM1105877     | cuero cabelludo humano-no afectado-4 |
 | GSM1105878     | cuero cabelludo humano-no afectado-5 |
 
-####b) Obtencion de los datos y preparacion de los datos para el analisis
+#### b) Obtencion de los datos y preparacion de los datos para el analisis
 
 Tras confirmar la existencia de archivos CEL procedemos a su descarga y creamos un archivo de targets. Este procedimiento tambien se puede realizar con el paquete GeoQuery (el codigo está incluido en el apendice).
 
@@ -113,7 +113,7 @@ knitr::kable(targets,
              caption = "Tabla 1. Archivos CEL")
 ```
 
-####c) Instalación de paquetes en R
+#### c) Instalación de paquetes en R
 
 El analisis se ha hecho utilizando el programa R y los paquetes necesarios para dicho analisis son los siguientes:
 
