@@ -56,10 +56,14 @@ require(clusterProfiler)
 # 1.- Abstract
 
 La alopecia areata es una enfermedad autoinmune mediada por células T, caracterizada fenotípicamente por la pérdida de cabello e, histológicamente, por las células T infiltrantes que rodean el bulbo del folículo piloso. Carece de terapias efectivas para pacientes con una perdida de cabello extensa. En este estudio (GDS5272) el objetivo fue desarrollar una descripción transcriptómica de la piel del cuero cabelludo alopécico afectado de pacientes con alopecia areata.
+Toda la información de este trabajo se encuentra en;
+[https://github.com/Tortufuriaperru/PEC1DatosOmicos.git]
+
 
 # 2.- Objetivos
 
 El objetivo de este análisis de datos de microarrays es conseguir caracterizar el perfil transcripcional de la piel lesionada con AA, para una vez conocido este, proceder a la realización de otros estudios con posibles tratamientos para esta enfermedad, que a dia de hoy carece de cura o tratamiento completamente efectivo.
+
 
 # 3.- Materiales y métodos
 
