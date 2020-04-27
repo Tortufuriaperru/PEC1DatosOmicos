@@ -1,0 +1,441 @@
+---
+title: "Codigo"
+author: "Eva Mª Ruiz Macias"
+date:  '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    code_folding: show
+    theme: journal
+    toc: yes
+    toc_float: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+require(knitr)
+require(colorspace)
+require(kableExtra)
+require(GEOquery)
+require(Biobase)
+require(BiocGenerics)
+require(parallel)
+require(ggplot2)
+require(gplots)
+require(ggrepel)
+require(htmlTable)
+require(prettydoc)
+require(devtools)
+require(affy)
+require(arrayQualityMetrics)
+require(BiocManager)
+require(hgu133a.db)
+require(hgu133plus2.db)
+require(pd.hg.u133.plus.2)
+require(limma)
+require(pvca)
+require(oligo)
+require(genefilter)
+require(annotate)
+require(ReactomePA)
+require(reactome.db)
+require(AnnotationDbi)
+require(org.Hs.eg.db)
+require(BiocStyle)
+require(DO.db)
+require(clusterProfiler)
+
+```
+
+#1.- Abstract
+
+La alopecia areata es una enfermedad autoinmune mediada por células T, caracterizada fenotípicamente por la pérdida de cabello e, histológicamente, por las células T infiltrantes que rodean el bulbo del folículo piloso. Carece de terapias efectivas para pacientes con una perdida de cabello extensa. En este estudio el objetivo fue desarrollar una descripción transcriptómica de la piel del cuero cabelludo alopécico afectado de pacientes con alopecia areata.
+
+#2.- Objetivos
+
+El objetivo de este análisis de datos de microarrays es conseguir caracterizar el perfil transcripcional de la piel lesionada con AA, para una vez conocido este, proceder a la realización de otros estudios con posibles tratamientos para esta enfermedad, que a dia de hoy carece de cura o tratamiento completamente efectivo.
+
+#3.- Materiales y métodos
+
+##3.1.- Naturaleza de los datos, tipo de experimento, diseño experimental, tipo de microarrays utilizados,…
+
+```{r, echo=TRUE, eval=FALSE}
+gds <- getGEO("GDS5272", GSEMatrix = TRUE)
+show(gds)
+summary(gds)
+library(arrayQualityMetrics)
+eset <- GDS2eSet(gds,do.log2=TRUE)
+arrayQualityMetrics(eset)
+pData(eset)
+
+```
+
+
+Otra forma
+```{r, echo=TRUE, eval=TRUE}
+targets <- read.csv2("C:/PEC1DatosOmicos/data/targets.csv", header = TRUE, sep = ";")  
+knitr::kable(targets, 
+             booktabs = TRUE,
+             caption = "Tabla 1. Archivos .CEL empleados en este estudio junto con el factor Group")
+
+celFiles <- list.celfiles("C:/PEC1DatosOmicos/data",
+                          full.names = TRUE)
+
+my.targets <- read.AnnotatedDataFrame("C:/PEC1DatosOmicos/data/targets.csv",
+                                      header = TRUE,
+                                      row.names = 1,
+                                      sep = ";")
+
+rawData <- read.celfiles(celFiles, phenoData = my.targets)
+my.targets@data$ShortName->rownames(pData(rawData))
+colnames(rawData) <-rownames(pData(rawData))
+head(rawData)
+lineas <- data.frame(grupo=c(1,1,1,1,1,0,0,0,0,0))
+sampleNames <- c("AA9","AA14","AA18","AA23","AA29","NAA11","NAA12","NAA13", "NAA16","NAA19")
+hist(rawData, main="Distribución de señal",
+     col=c(1,2,3,4,5,6,7,8,9,10),lty=1:ncol(lineas))
+
+legend (x="topright", legend=sampleNames ,
+        col=c(1,2,3,4,5,6,7,8,9,10),
+        lty=1:ncol(lineas))
+
+arrayQualityMetrics(rawData, outdir =("./data"), force=TRUE)
+
+
+plotPCA3 <- function (datos, labels, factor, title, scale,colores, size = 1.5, glineas = 0.25) {
+  data <- prcomp(t(datos),scale=scale)
+  # plot adjustments
+  dataDf <- data.frame(data$x)
+  Group <- factor
+  loads <- round(data$sdev^2/sum(data$sdev^2)*100,1)
+  # main plot
+  p1 <- ggplot(dataDf,aes(x=PC1, y=PC2)) +
+    theme_classic() +
+    geom_hline(yintercept = 0, color = "gray70") +
+    geom_vline(xintercept = 0, color = "gray70") +
+    geom_point(aes(color = Group), alpha = 0.55, size = 3) +
+    coord_cartesian(xlim = c(min(data$x[,1])-5,max(data$x[,1])+5)) +
+    scale_fill_discrete(name = "Group")
+  # avoiding labels superposition
+  p1 + geom_text_repel(aes(y = PC2 + 0.25, label = labels),segment.size = 0.25, size = size) + 
+    labs(x = c(paste("PC1",loads[1],"%")),y=c(paste("PC2",loads[2],"%"))) +  
+    ggtitle(paste("Principal Component Analysis for: ",title,sep=" "))+ 
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_color_manual(values=colores)
+}
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+plotPCA3(exprs(rawData), labels = targets$ShortName, factor = targets$Group, 
+         title="Raw data", scale = FALSE, size = 3, 
+         colores = c("red", "blue"))
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+boxplot(rawData, cex.axis=0.5, las=2,  which="all", 
+         col = c(rep("red", 5), rep("blue", 5)),
+         main="Distribution of raw intensity values")
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+eset_rma <- rma(rawData)
+arrayQualityMetrics(eset_rma, outdir = file.path("./results", "QCDir.Norm"), force=TRUE)
+```
+
+```{r, echo=TRUE, eval=TRUE}
+plotPCA3(exprs(eset_rma), labels = targets$ShortName,
+         factor = targets$Group, 
+         title="Normalized data", scale = FALSE, size = 3, 
+         colores = c("red", "blue", "green", "yellow"))
+```
+
+```{r, echo=TRUE, eval=TRUE}
+boxplot(eset_rma, cex.axis=0.5, las=2,  which="all", 
+        col = c(rep("red", 5), rep("blue", 5)),
+        main="Boxplot for arrays intensity: Normalized Data")
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+sds <- apply (exprs(eset_rma), 1, sd)
+sdsO<- sort(sds)
+plot(1:length(sdsO), sdsO, main="Distribution of variability for all genes",
+     sub="Vertical lines represent 90% and 95% percentiles",
+     xlab="Gene index (from least to most variable)", ylab="Standard deviation")
+abline(v=length(sds)*c(0.9,0.95))
+```
+
+```{r, echo=TRUE, eval=TRUE}
+annotation(eset_rma) <- "hgu133plus2.db"
+filtered <- nsFilter(eset_rma, 
+                     require.entrez = TRUE, remove.dupEntrez = TRUE,
+                     var.filter=TRUE, var.func=IQR, var.cutoff=0.75, 
+                     filterByQuantile=TRUE, feature.exclude="^AFFX")
+```
+
+```{r, echo=TRUE, eval=TRUE}
+names(filtered)
+class(filtered$eset)
+```
+
+```{r, echo=TRUE, eval=TRUE}
+print(filtered$filter.log)
+eset_filtered <-filtered$eset
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+write.csv(exprs(eset_rma), file="./results/normalized.Data.csv")
+write.csv(exprs(eset_filtered), file="./results/normalized.Filtered.Data.csv")
+save(eset_rma, eset_filtered, file="./results/normalized.Data.Rda")
+
+```
+
+```{r, echo=TRUE, eval=TRUE}
+
+if (!exists("eset_filtered")) load (file="./results/normalized.Data.Rda")
+
+```
+
+```{r, echo=TRUE, eval=TRUE}
+
+designMat<- model.matrix(~0+Group, pData(eset_filtered))
+colnames(designMat) <- c("AA", "NAA")
+print(designMat)
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+cont.matrix <- makeContrasts (AvsNAA = AA-NAA,
+                              levels=designMat)
+print(cont.matrix)
+```
+
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+fit<-lmFit(eset_filtered, designMat)
+fit.main<-contrasts.fit(fit, cont.matrix)
+fit.main<-eBayes(fit.main)
+class(fit.main)
+save(fit.main, file = file.path("./results", "celltypes=fitmain.Rda"))
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+topTab_AvsNAA <- topTable (fit.main, number=nrow(fit.main),
+                                coef="AvsNAA", adjust="fdr") 
+head(topTab_AvsNAA)
+class(topTab_AvsNAA)
+```
+
+```{r, echo=TRUE, eval=TRUE}
+
+knitr::kable(head(topTab_AvsNAA), booktabs = TRUE,
+             caption = 'Tabla 4. Cambio expresión entre "AA"y "NAA"')
+```
+
+```{r, echo=TRUE, eval=TRUE}
+annotatedTopTable <- function(topTab, anotPackage)
+{
+  topTab <- cbind(PROBEID=rownames(topTab), topTab)
+  myProbes <- rownames(topTab)
+  thePackage <- eval(parse(text = anotPackage))
+  geneAnots <- select(thePackage, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
+  annotatedTopTab<- merge(x=geneAnots, y=topTab, by.x="PROBEID", by.y="PROBEID")
+return(annotatedTopTab)
+}
+
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+topAnnotated_AvsNAA <- annotatedTopTable(topTab_AvsNAA,anotPackage="hgu133plus2.db")
+write.csv(topAnnotated_AvsNAA, file="./results/top_Annotated_AvsNAA.csv")
+short<- head(topAnnotated_AvsNAA)
+show(short)
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+geneSymbols <- select(hgu133plus2.db, rownames(fit.main), c("SYMBOL"))
+SYMBOLS<- geneSymbols$SYMBOL
+volcanoplot(fit.main, coef=1, highlight=4, names=SYMBOLS, 
+            main=paste("Differentially expressed genes",
+                       colnames(cont.matrix)[1], sep="\n"))
+abline(v=c(-1,1))
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+res<-decideTests(fit.main, method="separate", adjust.method="fdr", p.value=0.1, lfc=1)
+sum.res.rows<-apply(abs(res),1,sum)
+res.selected<-res[sum.res.rows!=0,] 
+print(summary(res))
+
+```
+
+```{r, echo=TRUE, eval=TRUE}
+vennDiagram (res.selected[,1], cex=0.9)
+title("Genes in common between the three comparisons\n Genes selected with FDR < 0.1 and logFC > 1")
+```
+
+```{r, echo=TRUE, eval=TRUE}
+probesInHeatmap <- rownames(res.selected)
+HMdata <- exprs(eset_filtered)[rownames(exprs(eset_filtered)) %in% probesInHeatmap,]
+
+geneSymbols <- select(hgu133plus2.db, rownames(HMdata), c("SYMBOL"))
+SYMBOLS<- geneSymbols$SYMBOL
+rownames(HMdata) <- SYMBOLS
+write.csv(HMdata, file = file.path("./results/data4Heatmap.csv"))
+```
+
+```{r, echo=TRUE, eval=TRUE}
+my_palette <- colorRampPalette(c("blue", "red"))(n = 299)
+
+
+heatmap.2(HMdata,
+          Rowv = FALSE,
+          Colv = FALSE,
+          main = "Differentially expressed genes \n FDR < 0,1, logFC >=1",
+          scale = "row",
+          col = my_palette,
+          sepcolor = "white",
+          sepwidth = c(0.05,0.05),
+          cexRow = 0.5,
+          cexCol = 0.9,
+          key = TRUE,
+          keysize = 1.5,
+          density.info = "histogram",
+          ColSideColors = c(rep("red",5),rep("blue",5)),
+          tracecol = NULL,
+          dendrogram = "none",
+          srtCol = 30)
+```
+
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+heatmap.2(HMdata,
+          Rowv = TRUE,
+          Colv = TRUE,
+          dendrogram = "both",
+          main = "Differentially expressed genes \n FDR < 0,1, logFC >=1",
+          scale = "row",
+          col = my_palette,
+          sepcolor = "white",
+          sepwidth = c(0.05,0.05),
+          cexRow = 0.5,
+          cexCol = 0.9,
+          key = TRUE,
+          keysize = 1.5,
+          density.info = "histogram",
+          ColSideColors = c(rep("red",5),rep("blue",5)),
+          tracecol = NULL,
+          srtCol = 30)
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+listOfTables <- list(AvsNAA = topTab_AvsNAA)
+listOfSelected <- list()
+for (i in 1:length(listOfTables)){
+  # select the toptable
+  topTab <- listOfTables[[i]]
+  # select the genes to be included in the analysis
+  whichGenes<-topTab["adj.P.Val"]<0.15
+  selectedIDs <- rownames(topTab)[whichGenes]
+  # convert the ID to Entrez
+  EntrezIDs<- select(hgu133plus2.db, selectedIDs, c("ENTREZID"))
+  EntrezIDs <- EntrezIDs$ENTREZID
+  listOfSelected[[i]] <- EntrezIDs
+  names(listOfSelected)[i] <- names(listOfTables)[i]
+}
+sapply(listOfSelected, length)
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+mapped_genes2GO <- mappedkeys(org.Hs.egGO)
+mapped_genes2KEGG <- mappedkeys(org.Hs.egPATH)
+mapped_genes <- union(mapped_genes2GO , mapped_genes2KEGG)
+
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+listOfData <- listOfSelected[1]
+comparisonsNames <- names(listOfData)
+universe <- mapped_genes
+
+for (i in 1:length(listOfData)){
+  genesIn <- listOfData[[i]]
+  comparison <- comparisonsNames[i]
+  enrich.result <- enrichPathway(gene = genesIn,
+                                 pvalueCutoff = 0.05,
+                                 readable = T,
+                                 pAdjustMethod = "BH",
+                                 organism = "human",
+                                 universe = universe)
+  
+  cat("##################################")
+  cat("\nComparison: ", comparison,"\n")
+  print(head(enrich.result))
+
+  if (length(rownames(enrich.result@result)) != 0) {
+  write.csv(as.data.frame(enrich.result), 
+             file =paste0("./results/","ReactomePA.Results.",comparison,".csv"),              row.names = FALSE)
+  
+  pdf(file=paste0("./results/","ReactomePABarplot.",comparison,".pdf"))
+    print(barplot(enrich.result, showCategory = 15, font.size = 4, 
+            title = paste0("Reactome Pathway Analysis for ", comparison,
+                           ". Barplot")))
+  dev.off()
+  
+  pdf(file = paste0("./results/","ReactomePAcnetplot.",comparison,".pdf"))
+    print(cnetplot(enrich.result, categorySize = "geneNum", schowCategory = 15,
+                   vertex.label.cex = 0.75))
+  dev.off()
+  }
+}
+
+```
+
+
+```{r, echo=TRUE, eval=TRUE}
+cnetplot(enrich.result, categorySize = "geneNum", schowCategory = 15, 
+         vertex.label.cex = 0.75)
+```
+
+
+
+```{r, echo=TRUE, eval=TRUE}
+Tab.react <- read.csv2(file.path("./results/ReactomePA.Results.AvsNAA.csv"), 
+                       sep = ",", header = TRUE, row.names = 1)
+
+Tab.react <- Tab.react[1:4, 1:5]
+knitr::kable(Tab.react, booktabs = TRUE, caption = "First rows and columns for Reactome results on AvsNAA.csv comparison")
+```
+
+
+
+```{r, echo=TRUE, eval=TRUE}
+listOfFiles <- dir("./results/") 
+knitr::kable(
+  listOfFiles, booktabs = TRUE,
+  caption = 'List of files generated in the analysis',
+  col.names="List_of_Files"
+)
+```

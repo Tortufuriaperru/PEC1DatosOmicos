@@ -1,0 +1,780 @@
+---
+title: "Datos Omicos PEC1"
+author: "Eva Mª Ruiz Macias"
+date:  '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    code_folding: show
+    theme: journal
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+require(knitr)
+require(colorspace)
+require(kableExtra)
+require(GEOquery)
+require(Biobase)
+require(BiocGenerics)
+require(parallel)
+require(ggplot2)
+require(gplots)
+require(ggrepel)
+require(htmlTable)
+require(prettydoc)
+require(devtools)
+require(affy)
+require(arrayQualityMetrics)
+require(BiocManager)
+require(hgu133a.db)
+require(hgu133plus2.db)
+require(pd.hg.u133.plus.2)
+require(limma)
+require(pvca)
+require(oligo)
+require(genefilter)
+require(annotate)
+require(ReactomePA)
+require(reactome.db)
+require(AnnotationDbi)
+require(org.Hs.eg.db)
+require(BiocStyle)
+require(DO.db)
+require(clusterProfiler)
+
+```
+
+# 1.- Abstract
+
+La alopecia areata es una enfermedad autoinmune mediada por células T, caracterizada fenotípicamente por la pérdida de cabello e, histológicamente, por las células T infiltrantes que rodean el bulbo del folículo piloso. Carece de terapias efectivas para pacientes con una perdida de cabello extensa. En este estudio (GDS5272) el objetivo fue desarrollar una descripción transcriptómica de la piel del cuero cabelludo alopécico afectado de pacientes con alopecia areata.
+
+# 2.- Objetivos
+
+El objetivo de este análisis de datos de microarrays es conseguir caracterizar el perfil transcripcional de la piel lesionada con AA, para una vez conocido este, proceder a la realización de otros estudios con posibles tratamientos para esta enfermedad, que a dia de hoy carece de cura o tratamiento completamente efectivo.
+
+# 3.- Materiales y métodos
+
+## 3.1.- Naturaleza de los datos, tipo de experimento, diseño experimental, tipo de microarrays utilizados,…
+
+Para las muestras de alopecia areata, se recolectaron biopsias por punción perilesional de 5 pacientes con alopecia areata irregular que no se sometieron a tratamientos locales o sistémicos y se compararon con biopsias del cuero cabelludo de 5 individuos no afectados no relacionados. Todos los procedimientos se realizaron bajo los protocolos aprobados por la Junta de Revisión Institucional de la Universidad de Columbia y se realizaron bajo los principios de la Declaración de Helsinki. Se recibió el consentimiento informado antes de su inclusión en el estudio. El ARN total extraído se transcribió inversamente y se amplificó usando el kit Ovation RNA Amplification V2 (NuGEN Technologies, Inc., San Carlos, CA). El ADNc amplificado se biotiniló con el Módulo de Biotina Encore (Tecnologías NuGEN) y luego se hibridó con los chips del gen U133 Plus 2.0.
+
+Para el estudio se cuenta por tanto con 10 archivos CEL, 5 para pacientes con AA y 5 para pacientes sanos de control.
+
+## 3.2.- Métodos que habéis utilizado en el análisis:
+
+### 3.2.1.- Procedimiento general de análisis (pasos, “workflow” o “pipeline” que habéis seguido)
+
+El objetivo del analisis es coger los datos sin procesar y siguiento una serie de pasos ordenados, obtner una o más listas de genes, las cuales podremos utilizar para responder a alguna cuestion biologica de interes. En la figura que se muestra a continuación, se puede ver este proceso habitualmente usado usando el lenguaje R:
+
+```{r , echo=FALSE, fig.cap="Proceso a seguir", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen1.png")
+```
+
+En este caso se siguen los siguientes pasos:
+
+####a) Identificación de grupos y quien pertenece a cada muestra.
+
+En este estudio se dispone de 10 muestras, 5 de ellas de pacientes con alopecia areata y otras cinco de pacientes sanos, identificadas como sigue:
+
+| Identificacion | tipo                                 |
+|----------------|--------------------------------------|
+| GSM1105869     | cuero cabelludo humano-aa-1          |
+| GSM1105870     | cuero cabelludo humano-aa-2          |
+| GSM1105871     | cuero cabelludo humano-aa-3          |
+| GSM1105872     | cuero cabelludo humano-aa-4          |
+| GSM1105873     | cuero cabelludo humano-aa-5          |
+| GSM1105874     | cuero cabelludo humano-no afectado-1 |
+| GSM1105875     | cuero cabelludo humano-no afectado-2 |
+| GSM1105876     | cuero cabelludo humano-no afectado-3 |
+| GSM1105877     | cuero cabelludo humano-no afectado-4 |
+| GSM1105878     | cuero cabelludo humano-no afectado-5 |
+
+####b) Obtencion de los datos y preparacion de los datos para el analisis
+
+Tras confirmar la existencia de archivos CEL procedemos a su descarga y creamos un archivo de targets. Este procedimiento tambien se puede realizar con el paquete GeoQuery (el codigo está incluido en el apendice).
+
+Cargamos el archivo targets, y mostramos:
+```{r, echo=FALSE, eval=TRUE}
+targets <- read.csv2("C:/PEC1DatosOmicos/data/targets.csv", header = TRUE, sep = ";")
+```
+
+```{r, echo=FALSE, eval=TRUE}
+knitr::kable(targets, 
+             booktabs = TRUE,
+             caption = "Tabla 1. Archivos CEL")
+```
+
+####c) Instalación de paquetes en R
+
+El analisis se ha hecho utilizando el programa R y los paquetes necesarios para dicho analisis son los siguientes:
+
+require(knitr)
+
+require(colorspace)
+
+require(kableExtra)
+
+require(GEOquery)
+
+require(Biobase)
+
+require(BiocGenerics)
+
+require(parallel)
+
+require(ggplot2)
+
+require(gplots)
+
+require(ggrepel)
+
+require(htmlTable)
+
+require(prettydoc)
+
+require(devtools)
+
+require(affy)
+
+require(arrayQualityMetrics)
+
+require(BiocManager)
+
+require(hgu133a.db)
+
+require(hgu133plus2.db)
+
+require(pd.hg.u133.plus.2)
+
+require(limma)
+
+require(pvca)
+
+require(oligo)
+
+require(genefilter)
+
+require(annotate)
+
+require(ReactomePA)
+
+require(reactome.db)
+
+require(AnnotationDbi)
+
+require(org.Hs.eg.db)
+
+require(BiocStyle)
+
+require(DO.db)
+
+require(clusterProfiler)
+
+
+#### d) Lectura de archivos CEL
+
+Con la orden read.AnnotatedDataFrame estamos asociando  la información almacenada en los archivos CEL con el archivo de destino. Monstramos el comienzo del archivo obtenido rawdata:
+
+
+```{r, echo=TRUE, eval=TRUE}
+celFiles <- list.celfiles("C:/PEC1DatosOmicos/data",
+                          full.names = TRUE)
+
+my.targets <- read.AnnotatedDataFrame("C:/PEC1DatosOmicos/data/targets.csv",
+                                      header = TRUE,
+                                      row.names = 1,
+                                      sep = ";")
+
+rawData <- read.celfiles(celFiles, phenoData = my.targets)
+my.targets@data$ShortName->rownames(pData(rawData))
+colnames(rawData) <-rownames(pData(rawData))
+head(rawData)
+```
+
+
+
+#### e) Control de calidad de los datos crudos
+
+Una vez cargados los datos sin procesar, tenemos que ver si tenemos suficiente calidad para proseguir con la normalización. Si se diera el este caso, se introduciria ruido de fondo en el analisis y la normalización podria no resolverlo. 
+
+Utilizaremos el paquete ArrayQualityMetrics, y esto nos permitirá obtener información visual mediante graficos y nos proporcinará informacion respecto al PCA y la intensidad de los datos.
+
+```{r, echo=TRUE, eval=FALSE}
+arrayQualityMetrics(rawData, outdir =("./data/QCDirRaw"), force=TRUE)
+```
+
+Con esta orden hemos generado una carpeta llamada QCDirRaw en la que encontraremos un archivo llamado index.html en el que se encuentra un resumen de este analisis. En el este archivo podemos ver una tabla que contiene ciertos criterios de calidad que permitiran verificar si los arrays tienenla calidad suficiente o no. Por ejemplo:
+
+```{r , echo=FALSE, fig.cap="Proceso a seguir", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen2.png")
+```
+
+Los números uno, dos y tres nos indican distintas formas de detectar outliers.
+Si estos marcadores estan marcados con tres asteriscos nos indicaria que podria ser conveniente eliminar alguna muestra para seguir con el analisis.
+
+Veamos en esta grafica la distribución de señal de los datos:
+
+```{r, echo=FALSE, eval=TRUE}
+lineas <- data.frame(grupo=c(1,1,1,1,1,0,0,0,0,0))
+sampleNames <- c("AA9","AA14","AA18","AA23","AA29","NAA11","NAA12","NAA13", "NAA16","NAA19")
+hist(rawData, main="Distribución de señal",
+     col=c(1,2,3,4,5,6,7,8,9,10),lty=1:ncol(lineas))
+
+legend (x="topright", legend=sampleNames ,
+        col=c(1,2,3,4,5,6,7,8,9,10),
+        lty=1:ncol(lineas))
+```
+
+En la grafica se observa cierta heterogeneidad en los datos, pero no la suficiente para que no podamos llevar a cabo la normalización de los datos.
+
+Veamos ahora una analisis de componentes principales.
+
+Generaremos un análisis PCA de los dos primeros componentes. En el eje x se representara la primera componente, en el y la segunda comoponete. El tanto por ciento de variabilidad explicada tambien aparecerá en los ejes. Cada grupo tendrá un color, la etiquetas de las muestras están codificadas por los ShortNames y 
+
+
+```{r, echo=FALSE, eval=TRUE}
+plotPCA3 <- function (datos, labels, factor, title, scale,colores, size = 1.5, glineas = 0.25) {
+  data <- prcomp(t(datos),scale=scale)
+  # ajusts
+  dataDf <- data.frame(data$x)
+  Group <- factor
+  loads <- round(data$sdev^2/sum(data$sdev^2)*100,1)
+  # grafica
+  p1 <- ggplot(dataDf,aes(x=PC1, y=PC2)) +
+    theme_classic() +
+    geom_hline(yintercept = 0, color = "gray70") +
+    geom_vline(xintercept = 0, color = "gray70") +
+    geom_point(aes(color = Group), alpha = 0.55, size = 3) +
+    coord_cartesian(xlim = c(min(data$x[,1])-5,max(data$x[,1])+5)) +
+    scale_fill_discrete(name = "Group")
+  # no superposicion etiquetas
+  p1 + geom_text_repel(aes(y = PC2 + 0.25, label = labels),segment.size = 0.25, size = size) + 
+    labs(x = c(paste("PC1",loads[1],"%")),y=c(paste("PC2",loads[2],"%"))) +  
+    ggtitle(paste("Principal Component Analysis for: ",title,sep=" "))+ 
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_color_manual(values=colores)
+}
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+plotPCA3(exprs(rawData), labels = targets$ShortName, factor = targets$Group, 
+         title="Raw data", scale = FALSE, size = 3, 
+         colores = c("red", "blue"))
+```
+
+
+```{r , echo=FALSE, fig.cap="Primer y segundo componente principal de los datos en crudo", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen3.png")
+```
+
+
+El primer componente del PCA representa un 46% del total de variabilidad de las muestras, y la segunda un 20.2%. Vemos como el grupo de AA está en el lado izquierdo y el grupo de sanos a la derecha, salvo un elemento de AA que se encuentra en esta zona. 
+
+Veamos tambien al intesidad de los datos mediante un boxplot multiple:
+
+```{r, echo=TRUE, eval=FALSE}
+boxplot(rawData, cex.axis=0.5, las=2,  which="all", 
+         col = c(rep("red", 5), rep("blue", 5)),
+         main="Distribution of raw intensity values")
+```
+
+```{r , echo=FALSE, fig.cap="Boxplot distribución de valores de intensidad crudos", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen4.png")
+```
+
+Se observa una ligera variación de intensidad entre las matrices, pero esta es la esperada para los datos sin procesar.
+
+Procedamos ahora a la normalización:
+
+#### f) Normalización
+
+ Vamos a tratar de reducir, y si es posible eliminar, toda la variabilidad en las muestras que no se deba a razones biológicas, para poder hacer que las matrices sean comparables. Con la normalización queremos que las diferencias de intensidad que presente la matriz, sean el reflejo de la expresión diferencial de los genes, no de sesgos artificiales debido a problemas técnicos.
+
+El proceso de normalización consta de tres pasos discretos: corrección de fondo, normalización y resumen. Para llevarlo a cabo haremos lo siguiente:
+
+
+```{r, echo=TRUE, eval=TRUE}
+eset_rma <- rma(rawData)
+```
+
+#### g) Control de calidad de datos normalizados.
+
+```{r, echo=TRUE, eval=FALSE}
+arrayQualityMetrics(eset_rma, outdir = file.path("./results", "QCDir.Norm"), force=TRUE)
+```
+
+Los resultados se almacenarán en QCDir.Norm
+
+Mostraremos ahora la tabla resumen de los datos normalizados que aparecen en el archivo index.html.
+
+```{r , echo=FALSE, fig.cap="Tabla resumen datos normalizados", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen5.png")
+```
+
+Veamos ahora el diagrama de dispersión de las dos primeras componentes con los datos normalizados:
+
+```{r, echo=TRUE, eval=FALSE}
+plotPCA3(exprs(eset_rma), labels = targets$ShortName,
+         factor = targets$Group, 
+         title="Normalized data", scale = FALSE, size = 3, 
+         colores = c("red", "blue", "green", "yellow"))
+```
+
+
+
+```{r , echo=FALSE, fig.cap="Primer y segundo componente principal de los datos normalizados", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen6.png")
+```
+
+Ahora el primer componente representa el 37.3% de la variabilidad total. Se observa que el porcentaje de variabilidad explicada ha disminuido con respecto a la PCA realizada en datos sin procesar. Las muestras de AA areata quedan a la izquierda mientras que las que no tienen AA se quedan a la derecha. Hay una muestra de NAA que está cerca de la zona izquierda lo cual podria deberia verificarse, porque con tan pocas muestras no parece un error de etiquetado.
+
+```{r, echo=TRUE, eval=FALSE}
+boxplot(eset_rma, cex.axis=0.5, las=2,  which="all", 
+        col = c(rep("red", 5), rep("blue", 5)),
+        main="Boxplot for arrays intensity: Normalized Data")
+```
+
+```{r , echo=FALSE, fig.cap="Boxplot distribución de valores de intensidad datos normalizados", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen7.png")
+```
+
+En este gráfico todos los diagramas de cajas tienen el mismo aspecto, lo cual significa que la normalizacion ha funcionado, aunque hay que tener en cuenta que la instruccion rma contiene la normalización cuantil, lo cual hará que la distribución empírica de todas las muestras se establezca con los mismos valores, y por tanto, los diagramas serán iguales o muy semejantes.
+
+#### h) Variabilidad genes
+
+El objetivo es seleccionar genes expresados diferencialmente (DEG). Esto se puede ver afectado por el número de genes iniciales que haya. Cuanto mayor sea el número, mayor será el ajuste necesario de los valores de p.
+
+Vamos a representar los genes con mayor variabilidad, es decir aquellos que presentan una desviación estándar superior al 90-95% de todas las desviaciones estándar.
+
+```{r, echo=TRUE, eval=TRUE}
+sds <- apply (exprs(eset_rma), 1, sd)
+sdsO<- sort(sds)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(1:length(sdsO), sdsO, main="Distribution of variability for all genes",
+     sub="Vertical lines represent 90% and 95% percentiles",
+     xlab="Gene index (from least to most variable)", ylab="Standard deviation")
+abline(v=length(sds)*c(0.9,0.95))
+```
+
+```{r , echo=FALSE, fig.cap="DS de todas las muestras para genes ordenados de menos a mayor DS", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen8.png")
+```
+
+#### i) Filtrado
+
+Filtrar aquellos genes cuya variabilidad se puede atribuir a la variación aleatoria, es decir, los genes que, razonablemente, no se espera que expresen diferencialmente, puede ser bastante util.  La función nsFilter del paquete bioconductor genefilterse puede utilizar para eliminar genes en función de un umbral de variabilidad. Si hay disponible un paquete de anotaciones -asociando identificadores de conjuntos de sondas e identificadores de genes de diferentes bases de datos-, también puede usarse para eliminar conjuntos de sondas que no tienen un identificador de gen asociado.
+
+(No estoy segura de si en este estudio es adecuado hacer un filtrado, ya que podria afectar a resultados posteriores)
+
+```{r, echo=TRUE, eval=TRUE}
+annotation(eset_rma) <- "hgu133plus2.db"
+filtered <- nsFilter(eset_rma, 
+                     require.entrez = TRUE, remove.dupEntrez = TRUE,
+                     var.filter=TRUE, var.func=IQR, var.cutoff=0.75, 
+                     filterByQuantile=TRUE, feature.exclude="^AFFX")
+```
+
+```{r, echo=TRUE, eval=TRUE}
+names(filtered)
+class(filtered$eset)
+```
+
+```{r, echo=TRUE, eval=TRUE}
+print(filtered$filter.log)
+eset_filtered <-filtered$eset
+```
+
+Creamos los archivos con los datos normalizados y filtrados y los usaremos en apartados posteriores:
+
+```{r, echo=TRUE, eval=TRUE}
+write.csv(exprs(eset_rma), file="./results/normalized.Data.csv")
+write.csv(exprs(eset_filtered), file="./results/normalized.Filtered.Data.csv")
+save(eset_rma, eset_filtered, file="./results/normalized.Data.Rda")
+
+```
+
+#### j) Identificación de genes diferencialmente expresados
+
+La selección de genes diferencialmente expresados se basa en diferentes aproximaciones, en las que generalmente se compara la expresión de genes entre grupos.
+
+El primer paso para el análisis basado en modelos lineales es crear la matriz de diseño . En nuestro caso tendrá 10 filas pertenecientes a las muestras y 2 columnas pertenecientes a los grupos. Cada fila contiene un uno en la columna del grupo al que pertenece la muestra y un cero en los demás.
+```{r, echo=TRUE, eval=TRUE}
+
+if (!exists("eset_filtered")) load (file="./results/normalized.Data.Rda")
+
+```
+
+```{r, echo=TRUE, eval=TRUE}
+
+designMat<- model.matrix(~0+Group, pData(eset_filtered))
+colnames(designMat) <- c("AA", "NAA")
+print(designMat)
+```
+
+Ahora crearemos la matriz de contrastes, para poder realizar comparaciones entre grupos. En este estudio se quieren ver las diferencias en la descripción transcriptomica de la piel  de los pacientes con AA con respecto a las personas sanas. La matriz de constrastes está hecha para hacer una sola comparación.
+
+```{r, echo=TRUE, eval=TRUE}
+cont.matrix <- makeContrasts (AvsNAA = AA-NAA,
+                              levels=designMat)
+print(cont.matrix)
+```
+
+Una vez definidas la matriz de diseño y los contrastes, podemos proceder a estimar el modelo, estimar los contrastes y realizar las pruebas de significación que nos diran , para cada gen y cada comparación, si pueden considerarse expresados diferencialmente.
+
+Usaremos el paquete limma, ya que incluye un análisis  basado en modelos de Bayes, que nos permitira obtener mejores estimaciones del error. Para controlar el porcentaje de falsos positivos que pueden resultar del alto número de contrastes realizados simultáneamente, los valores p se ajustan para que tengamos control sobre la tasa de falsos positivos utilizando el método de Benjamini y Hochberg Benjamini y Hochberg.
+
+
+
+```{r, echo=TRUE, eval=TRUE}
+
+fit<-lmFit(eset_filtered, designMat)
+fit.main<-contrasts.fit(fit, cont.matrix)
+fit.main<-eBayes(fit.main)
+class(fit.main)
+save(fit.main, file = file.path("./results", "celltypes=fitmain.Rda"))
+```
+
+La función topTableque contiene, para un contraste dado, una lista de genes ordenados desde el valor p más pequeño al más grande que puede considerarse como más o menos expresado diferencialmente. Para cada gen se proporcionan las siguientes estadísticas:
+
+*logFC: Diferencia media entre grupos.
+*AveExpr: Expresión media de todos los genes en la comparación.
+*t : Estadística t moderada (estadística similar a la prueba t para la comparación).
+*P.Value: Prueba valor p.
+*adj.P.Val: Valor p ajustado según Benjamini y Hochberg ( 1995 )
+*B: Estadística B: probabilidades de registro posterior del gen de ser versus no ser diferencial expresado.
+
+Para la comparación entre AA y NAA tendremos:
+
+```{r, echo=TRUE, eval=TRUE}
+topTab_AvsNAA <- topTable (fit.main, number=nrow(fit.main),
+                                coef="AvsNAA", adjust="fdr") 
+head(topTab_AvsNAA)
+class(topTab_AvsNAA)
+```
+
+La primera columna de cada tabla superior contiene la identificación del fabricante (Affymetrix) para cada conjunto de sondas. El siguiente paso es adivinar qué gen corresponde a cada ID de Affymetrix. Este proceso se llama anotación .
+
+#### k) Anotación de los resultados
+
+Ahora buscaremos información asociada a los ID que aparecen en la tabla, que se corresponden con los conjuntos de sondas como Gene Symbol, Entrez Gene ID o Gene description.
+
+```{r, echo=TRUE, eval=TRUE}
+annotatedTopTable <- function(topTab, anotPackage)
+{
+  topTab <- cbind(PROBEID=rownames(topTab), topTab)
+  myProbes <- rownames(topTab)
+  thePackage <- eval(parse(text = anotPackage))
+  geneAnots <- select(thePackage, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
+  annotatedTopTab<- merge(x=geneAnots, y=topTab, by.x="PROBEID", by.y="PROBEID")
+return(annotatedTopTab)
+}
+
+```
+
+
+Guardaremos los resultados, y mostraremos una parte de las anotaciones de nuestra comparación:
+
+```{r, echo=TRUE, eval=TRUE}
+
+topAnnotated_AvsNAA <- annotatedTopTable(topTab_AvsNAA,anotPackage="hgu133plus2.db")
+```
+
+```{r, echo=TRUE, eval=FALSE}
+write.csv(topAnnotated_AvsNAA, file="./results/top_Annotated_AvsNAA.csv")
+```
+
+```{r, echo=TRUE, eval=TRUE}
+short<- head(topAnnotated_AvsNAA)
+show(short)
+```
+
+Con el Volcanoplot veremos la expresión diferencial global y la cantidad genes que hay con un gran fold-change significativamente expresados.
+
+```{r, echo=TRUE, eval=TRUE}
+geneSymbols <- select(hgu133plus2.db, rownames(fit.main), c("SYMBOL"))
+SYMBOLS<- geneSymbols$SYMBOL
+```
+
+```{r, echo=TRUE, eval=FALSE}
+volcanoplot(fit.main, coef=1, highlight=4, names=SYMBOLS, 
+            main=paste("Differentially expressed genes",
+                       colnames(cont.matrix)[1], sep="\n"))
+abline(v=c(-1,1))
+```
+
+```{r , echo=FALSE, fig.cap="Diagrama de volcan para la comparación AAvsNAA", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen9.png")
+```
+
+Los nombres de los genes aparecen marcados en la gráfica.
+
+La orden decideTests se usa para contar los genes seleccionados en la comparación realizada. Fijaremos p-valor de 0.1.  En el objeto res tendremos tantas columnas como comparaciones y tantas filas como genes.
+
+
+```{r, echo=TRUE, eval=TRUE}
+res<-decideTests(fit.main, method="separate", adjust.method="fdr", p.value=0.1, lfc=1)
+sum.res.rows<-apply(abs(res),1,sum)
+res.selected<-res[sum.res.rows!=0,] 
+print(summary(res))
+
+```
+
+
+Los mapas de calor se pueden usar para visualizar los valores de expresión de genes expresados diferencialmente sin un orden específico, pero generalmente se prefiere trazarlos haciendo un agrupamiento jerárquico en genes (filas) o columnas (muestras) para encontrar grupos de genes con patrones comunes de variación que eventualmente puede asociarse a los diferentes grupos que se comparan. Nos quedaremos con los genes que se han seleccionado en los pasos anteriores.
+
+
+```{r, echo=TRUE, eval=TRUE}
+probesInHeatmap <- rownames(res.selected)
+HMdata <- exprs(eset_filtered)[rownames(exprs(eset_filtered)) %in% probesInHeatmap,]
+
+geneSymbols <- select(hgu133plus2.db, rownames(HMdata), c("SYMBOL"))
+SYMBOLS<- geneSymbols$SYMBOL
+rownames(HMdata) <- SYMBOLS
+write.csv(HMdata, file = file.path("./results/data4Heatmap.csv"))
+```
+
+
+
+
+
+```{r , echo=FALSE, fig.cap="Mapa de calor para datos de expresión sin ninguna agrupación", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen10.png")
+```
+
+
+
+```{r , echo=FALSE, fig.cap="Mapa de calor para expresión de datos que agrupan genes (filas) y muestras (columnas) por su similitud", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen11.png")
+```
+
+#### l) Análisis de significación biológica
+Una vez que tenemos los genes que caracterizan la diferencia entre las condiciones, debemos interpretarla. 
+
+Queremos ver si los genes seleccionados por estar diferencialmente expresados aparecen con mayor frecuencia en esta lista que el resto. Aqui utilizaremos el basic enrichment del paquete Reactome.db de bioconductor.
+
+Crearemos una lista con los genes a analizar y fijaremos el pvalor:
+
+```{r, echo=TRUE, eval=TRUE}
+listOfTables <- list(AvsNAA = topTab_AvsNAA)
+listOfSelected <- list()
+for (i in 1:length(listOfTables)){
+  # select the toptable
+  topTab <- listOfTables[[i]]
+  # select the genes to be included in the analysis
+  whichGenes<-topTab["adj.P.Val"]<0.15
+  selectedIDs <- rownames(topTab)[whichGenes]
+  # convert the ID to Entrez
+  EntrezIDs<- select(hgu133plus2.db, selectedIDs, c("ENTREZID"))
+  EntrezIDs <- EntrezIDs$ENTREZID
+  listOfSelected[[i]] <- EntrezIDs
+  names(listOfSelected)[i] <- names(listOfTables)[i]
+}
+sapply(listOfSelected, length)
+```
+
+Ahora necesitaremos las ID de Entrez para los genes analizados y seleccionaremos los genes que tengan al menos una anotación en Gene Ontology:
+
+```{r, echo=TRUE, eval=TRUE}
+mapped_genes2GO <- mappedkeys(org.Hs.egGO)
+mapped_genes2KEGG <- mappedkeys(org.Hs.egPATH)
+mapped_genes <- union(mapped_genes2GO , mapped_genes2KEGG)
+
+```
+
+
+La significación biologica será el resultado de esta función. Crearemos un archivo csv, con las rutas enriquecidas y estadisticas asociadas, un diagrama de barras con las mejores rutas enriquecidas y una trama con una red de las vías enriquecidas y la relación entre los genes incluidos :
+
+
+```{r, echo=TRUE, eval=TRUE}
+listOfData <- listOfSelected[1]
+comparisonsNames <- names(listOfData)
+universe <- mapped_genes
+
+for (i in 1:length(listOfData)){
+  genesIn <- listOfData[[i]]
+  comparison <- comparisonsNames[i]
+  enrich.result <- enrichPathway(gene = genesIn,
+                                 pvalueCutoff = 0.05,
+                                 readable = T,
+                                 pAdjustMethod = "BH",
+                                 organism = "human",
+                                 universe = universe)
+  
+  cat("##################################")
+  cat("\nComparison: ", comparison,"\n")
+  print(head(enrich.result))
+
+  if (length(rownames(enrich.result@result)) != 0) {
+  write.csv(as.data.frame(enrich.result), 
+             file =paste0("./results/","ReactomePA.Results.",comparison,".csv"),              row.names = FALSE)
+  
+  pdf(file=paste0("./results/","ReactomePABarplot.",comparison,".pdf"))
+    print(barplot(enrich.result, showCategory = 15, font.size = 4, 
+            title = paste0("Reactome Pathway Analysis for ", comparison,
+                           ". Barplot")))
+  dev.off()
+  
+  pdf(file = paste0("./results/","ReactomePAcnetplot.",comparison,".pdf"))
+    print(cnetplot(enrich.result, categorySize = "geneNum", schowCategory = 15,
+                   vertex.label.cex = 0.75))
+  dev.off()
+  }
+}
+
+```
+
+En la siguiente figura veremos la red producida a partir de los genes seleccionados en la comparación AAvsNAA:
+
+```{r, echo=TRUE, eval=FALSE}
+cnetplot(enrich.result, categorySize = "geneNum", schowCategory = 15, 
+         vertex.label.cex = 0.75)
+```
+
+```{r , echo=FALSE, fig.cap="Red obtenida del análisis de enriquecimiento de Reactome en la lista obtenida de la comparación entre AAvsNAA", out.width = '100%'}
+knitr::include_graphics("C:/Pec1DatosOmicos/textos/imagen12.png")
+```
+
+En nuestro estudio se han encontrado 4 vias, por ejemplo la keranitizacion.
+
+En esta tabla se pueden ver los pathways:
+
+```{r, echo=TRUE, eval=TRUE}
+Tab.react <- read.csv2(file.path("./results/ReactomePA.Results.AvsNAA.csv"), 
+                       sep = ",", header = TRUE, row.names = 1)
+
+Tab.react <- Tab.react[1:4, 1:5]
+knitr::kable(Tab.react, booktabs = TRUE, caption = "First rows and columns for Reactome results on AvsNAA.csv comparison")
+```
+
+# 4.- Resultados
+
+Aqui se mostrara una lista de archivos generados en el estudio de caso actual.
+
+
+```{r, echo=TRUE, eval=TRUE}
+listOfFiles <- dir("./results/") 
+knitr::kable(
+  listOfFiles, booktabs = TRUE,
+  caption = 'List of files generated in the analysis',
+  col.names="List_of_Files"
+)
+```
+
+# 5.- Discusion
+
+Al ser un estudio pequeño con pocas muestras, y solo de dos tipos, no podemos hacer más comparaciones. Si hubiesen muestras diferenciadas por otras caracteristicas podriamos hacer un mayor numero de comparaciónes y obtener más información.
+
+# 6.- Conclusion
+
+Para ver el estudio con mayor profundidad y ver las conclusiones, pinchar [aqui](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4362521/)
+
+# 7.- Apendice
+
+3.2.1 b) Obtencion de los datos y preparacion de los datos para el analisis
+
+```{r, echo=TRUE, eval=FALSE}
+targets <- read.csv2("C:/PEC1DatosOmicos/data/targets.csv", header = TRUE, sep = ";")
+```
+
+```{r, echo=TRUE, eval=FALSE}
+knitr::kable(targets, 
+             booktabs = TRUE,
+             caption = "Tabla 1. Archivos CEL")
+```
+
+
+3.2.1 e)
+```{r, echo=TRUE, eval=FALSE}
+lineas <- data.frame(grupo=c(1,1,1,1,1,0,0,0,0,0))
+sampleNames <- c("AA9","AA14","AA18","AA23","AA29","NAA11","NAA12","NAA13", "NAA16","NAA19")
+hist(rawData, main="Distribución de señal",
+     col=c(1,2,3,4,5,6,7,8,9,10),lty=1:ncol(lineas))
+
+legend (x="topright", legend=sampleNames ,
+        col=c(1,2,3,4,5,6,7,8,9,10),
+        lty=1:ncol(lineas))
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+plotPCA3 <- function (datos, labels, factor, title, scale,colores, size = 1.5, glineas = 0.25) {
+  data <- prcomp(t(datos),scale=scale)
+  # ajusts
+  dataDf <- data.frame(data$x)
+  Group <- factor
+  loads <- round(data$sdev^2/sum(data$sdev^2)*100,1)
+  # grafica
+  p1 <- ggplot(dataDf,aes(x=PC1, y=PC2)) +
+    theme_classic() +
+    geom_hline(yintercept = 0, color = "gray70") +
+    geom_vline(xintercept = 0, color = "gray70") +
+    geom_point(aes(color = Group), alpha = 0.55, size = 3) +
+    coord_cartesian(xlim = c(min(data$x[,1])-5,max(data$x[,1])+5)) +
+    scale_fill_discrete(name = "Group")
+  # no superposicion etiquetas
+  p1 + geom_text_repel(aes(y = PC2 + 0.25, label = labels),segment.size = 0.25, size = size) + 
+    labs(x = c(paste("PC1",loads[1],"%")),y=c(paste("PC2",loads[2],"%"))) +  
+    ggtitle(paste("Principal Component Analysis for: ",title,sep=" "))+ 
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_color_manual(values=colores)
+}
+```
+
+
+3.2.1 k)
+```{r, echo=TRUE, eval=FALSE}
+my_palette <- colorRampPalette(c("blue", "red"))(n = 299)
+
+
+heatmap.2(HMdata,
+          Rowv = FALSE,
+          Colv = FALSE,
+          main = "Differentially expressed genes \n FDR < 0,1, logFC >=1",
+          scale = "row",
+          col = my_palette,
+          sepcolor = "white",
+          sepwidth = c(0.05,0.05),
+          cexRow = 0.5,
+          cexCol = 0.9,
+          key = TRUE,
+          keysize = 1.5,
+          density.info = "histogram",
+          ColSideColors = c(rep("red",5),rep("blue",5)),
+          tracecol = NULL,
+          dendrogram = "none",
+          srtCol = 30)
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+
+heatmap.2(HMdata,
+          Rowv = TRUE,
+          Colv = TRUE,
+          dendrogram = "both",
+          main = "Differentially expressed genes \n FDR < 0,1, logFC >=1",
+          scale = "row",
+          col = my_palette,
+          sepcolor = "white",
+          sepwidth = c(0.05,0.05),
+          cexRow = 0.5,
+          cexCol = 0.9,
+          key = TRUE,
+          keysize = 1.5,
+          density.info = "histogram",
+          ColSideColors = c(rep("red",5),rep("blue",5)),
+          tracecol = NULL,
+          srtCol = 30)
+```
